@@ -4,9 +4,8 @@ import unicodedata
 def normalizar_texto(texto):
     return ''.join((c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn'))
 
-
 def buscar_livros_da_api(categoria):
-    url = f"https://openlibrary.org/subjects/{categoria}.json?limit=10"
+    url = f"https://openlibrary.org/subjects/{categoria}.json?limit=1" 
     
     try:
         response = requests.get(url)
@@ -14,108 +13,101 @@ def buscar_livros_da_api(categoria):
         if response.status_code == 200:
             dados = response.json()  
             livros = dados.get("works", [])
-            
-            if livros:
-                print(f"\nLivros encontrados na categoria '{categoria}':")
-                for i, livro in enumerate(livros, 1):
-                    autores = livro.get('authors', [])
-                    autor = autores[0]['name'] if autores else 'Autor desconhecido'
-                    print(f"{i}. {livro['title']} - {autor}")
-                return livros  
-            else:
-                print("Nenhum livro encontrado para essa categoria.")
-                return [] 
+            return len(livros) > 0  
         else:
-            print(f"Erro ao acessar a API: {response.status_code}")
-            return []  
-    except requests.exceptions.RequestException as e:
-        print(f"Erro na requisição: {e}")
-        return []  
+            return False  
+    except requests.exceptions.RequestException:
+        return False  
 
+def listar_categorias(categorias):
+    categorias_disponiveis = {}
+    print("\nVerificando disponibilidade de categorias...")
 
-def validar_entrada(entrada, max_valor):
-    try:
-        valores = [int(num.strip()) for num in entrada.split(',')]
-        
-        if all(1 <= num <= max_valor for num in valores):
-            return valores
-        elif entrada.strip() == '0':  
-            return 'sair'
+    for chave, nome in categorias.items():
+        if buscar_livros_da_api(chave): 
+            categorias_disponiveis[chave] = nome + " (disponível)"
         else:
-            print(f"Por favor, insira números entre 1 e {max_valor}, ou 0 para sair.")
-            return None
-    except ValueError:
-        print("Entrada inválida. Por favor, insira apenas números inteiros.")
-        return None
+            categorias_disponiveis[chave] = nome + " (indisponível)"
 
-
-def exibir_e_selecionar_livros():
-    livros_selecionados = {'fundamental': [], 'medio': [], 'programacao': [], 'infantil': [],
-                           'ficcao': [], 'nao-ficcao': [], 'historia': [], 'literatura': [],
-                           'ciencia': [], 'arte': [], 'biografia': [], 'tecnologia': []}
+    print("\nAs categorias são:")
+    for chave, status in categorias_disponiveis.items():
+        print(f"- {status}")
     
-    while True:
-        ver_livros = input("Deseja ver uma lista dos livros disponíveis para qual tipo de ensino ou tema (Fundamental, Médio, Programação, Infantil, Ficção, História, Ciência, Arte, Biografia, Tecnologia)? Ou digite 0 para sair: ").strip().lower()
-        
-        if ver_livros == '0': 
-            break
-        
-        ver_livros_normalizado = normalizar_texto(ver_livros)  
-        
-        if ver_livros_normalizado == 'fundamental':
-            categoria = 'fundamental'
-        elif ver_livros_normalizado == 'medio':
-            categoria = 'medio'
-        elif ver_livros_normalizado == 'programacao':
-            categoria = 'programacao'
-        elif ver_livros_normalizado == 'infantil':
-            categoria = 'infantil'
-        elif ver_livros_normalizado == 'ficcao':
-            categoria = 'ficcao'
-        elif ver_livros_normalizado == 'nao-ficcao':
-            categoria = 'nao-ficcao'
-        elif ver_livros_normalizado == 'historia':
-            categoria = 'historia'
-        elif ver_livros_normalizado == 'literatura':
-            categoria = 'literatura'
-        elif ver_livros_normalizado == 'ciencia':
-            categoria = 'ciencia'
-        elif ver_livros_normalizado == 'arte':
-            categoria = 'arte'
-        elif ver_livros_normalizado == 'biografia':
-            categoria = 'biografia'
-        elif ver_livros_normalizado == 'tecnologia':
-            categoria = 'tecnologia'
-        else:
-            print("Categoria inválida! Tente novamente.")
-            continue
-        
-        livros = buscar_livros_da_api(categoria)
-        
-        if livros:
-            escolha_livros = input('Com base na tabela, selecione os itens que você deseja baixar (separados por vírgula) ou digite "0" para sair: ')
-            num_escolhidos = validar_entrada(escolha_livros, len(livros)) 
-            
-            if num_escolhidos == 'sair':
-                break
+    return categorias_disponiveis
 
-            if num_escolhidos:
-                for c in num_escolhidos:
-                    livro_selecionado = livros[c - 1]
-                    livros_selecionados[categoria].append(livro_selecionado['title'])
-                    print(f"Você escolheu o livro: {livro_selecionado['title']}")
-
-    print("\nLista de livros escolhidos por categoria:")
-    for categoria, livros in livros_selecionados.items():
-        if livros:
-            print(f"\nCategoria {categoria.capitalize()}:")
-            for livro in livros:
-                print(f"- {livro}")
-
+def buscar_e_listar_livros(categorias_escolhidas, categorias):
+    livros_encontrados = []
+    for categoria in categorias_escolhidas:
+        print(f"\nBuscando livros da categoria '{categorias[categoria]}'...")
+        url = f"https://openlibrary.org/subjects/{categoria}.json?limit=10"
+        try:
+            response = requests.get(url)
+            if response.status_code == 200:
+                dados = response.json()
+                livros = dados.get("works", [])
+                if livros:
+                    print(f"\nLivros encontrados na categoria '{categorias[categoria]}':")
+                    for i, livro in enumerate(livros, 1):
+                        autores = livro.get('authors', [])
+                        autor = autores[0]['name'] if autores else 'Autor desconhecido'
+                        print(f"{i}. {livro['title']} - {autor}")
+                        livros_encontrados.append((livro['title'], autor))
+                else:
+                    print(f"\nNenhum livro encontrado na categoria '{categorias[categoria]}'.")
+            else:
+                print(f"\nErro ao acessar a API para a categoria '{categorias[categoria]}'.")
+        except requests.exceptions.RequestException:
+            print(f"\nErro na requisição para a categoria '{categorias[categoria]}'.")
+    
+    return livros_encontrados
 
 def main():
-    exibir_e_selecionar_livros()
+    categorias = {
+        'fundamental': "Fundamental",
+        'infantil': "Infantil",
+        'medio': "Médio",
+        'programacao': "Programação",
+        'ficcao': "Ficção",
+        'nao-ficcao': "Não-ficção",
+        'historia': "História",
+        'literatura': "Literatura",
+        'ciencia': "Ciência",
+        'arte': "Arte",
+        'biografia': "Biografia",
+        'tecnologia': "Tecnologia"
+    }
 
+    categorias_disponiveis = listar_categorias(categorias)
+
+    while True:
+        categorias_escolhidas = input("\nDigite as categorias desejadas separadas por vírgula ou digite 0 para sair: ").strip().lower()
+        if categorias_escolhidas == '0':
+            print("\nSaindo do programa...")
+            return
+        
+        categorias_escolhidas = [normalizar_texto(cat.strip()) for cat in categorias_escolhidas.split(',')]
+
+        if all(cat in categorias_disponiveis and "disponível" in categorias_disponiveis[cat] for cat in categorias_escolhidas):
+            break
+        else:
+            print("\nErro: Algumas categorias inseridas são inválidas ou indisponíveis. Tente novamente.")
+
+    while True:
+        autorizar = input("\nVocê deseja listar os livros encontrados? (s/n): ").strip().lower()
+        if autorizar == 's':
+            livros_encontrados = buscar_e_listar_livros(categorias_escolhidas, categorias)
+            if livros_encontrados:
+                print("\nResumo dos livros encontrados:")
+                for i, (titulo, autor) in enumerate(livros_encontrados, 1):
+                    print(f"{i}. {titulo} - {autor}")
+            else:
+                print("\nNenhum livro foi encontrado nas categorias selecionadas.")
+            break
+        elif autorizar == 'n':
+            print("\nOperação cancelada. Saindo do programa...")
+            break
+        else:
+            print("\nOpção inválida. Por favor, digite 's' para sim ou 'n' para não.")
 
 if __name__ == "__main__":
     main()
